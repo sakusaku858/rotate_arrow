@@ -13,6 +13,9 @@ const COUNT_UP = "up_count";
 const COUNT_DOWN = "down_count";
 const COUNT_LEFT = "left_count";
 const COUNT_RIGHT = "right_count";
+const RESET_ID = "reset";
+const HISTORY_ID = "history";
+const UNDO_ID = "undo";
 
 class Selector {
     constructor() {
@@ -124,6 +127,12 @@ class Board {
             cell.setColor("white");
         }
     }
+    initializeCells() {
+        for (let cell of this.cells) {
+            cell.setDirection(EMPTY);
+        }
+        this.cell(2, 2).direction = UP;
+    }
 }
 
 class Counter {
@@ -217,6 +226,108 @@ class Turn {
     }
 }
 
+class Reset {
+    constructor(board) {
+        this.board = board;
+        this.setClickFunc();
+    }
+    setClickFunc() {
+        let reset_element = document.getElementById("reset");
+        reset_element.addEventListener('click', this.reset.bind(this));
+    }
+    reset() {
+        console.log("reset");
+        for (let cell of this.board.cells) {
+            cell.setDirection(EMPTY);
+        }
+        this.board.cell(2, 2).setDirection(UP);
+    }
+}
+
+class History {
+    constructor(board, selector, turn) {
+        this.hands = [];
+        this.board = board;
+        this.selector = selector;
+        this.turn = turn;
+
+        this.setClickFunc();
+
+        document.addEventListener('keypress', keypress_ivent.bind(this));
+
+        function keypress_ivent(e) {
+            if (e.key === 'Enter') {
+                this.showHands();
+            }
+            return false;
+        }
+    }
+    setClickFunc() {
+        let board_element = document.getElementById(BOARD_ID);
+        for (let cell of this.board.cells) {
+            let x = cell.x;
+            let y = cell.y;
+            board_element.rows[y].cells[x].addEventListener("click", this.clickFunc.bind(this));
+        }
+        let reset_element = document.getElementById(RESET_ID);
+        reset_element.addEventListener("click", this.reset.bind(this));
+    }
+    reset() {
+        this.hands = [];
+    }
+    clickFunc(e) {
+        let n = Number(e.target.id);
+        let x = n % 5;
+        let y = Math.floor(n / 5);
+        let cell = this.board.cell(x, y);
+        let hand = new Hand(cell, this.selector.selected);
+        if (hand.isLegal() && !this.turn.isInProgress) this.hands.push(hand);
+    }
+    showHands() {
+        console.log(this.hands);
+    }
+    drawHistry() {
+        let history_element = document.getElementById(HISTORY_ID);
+        let text = "";
+        for (let i = 0; i < this.hands.length; i++) {
+            let hand = this.hands[i];
+            let x = hand.cell.x;
+            let y = hand.cell.y;
+            let str = ["↑", "→", "↓", "←"]
+            let dir = str[hand.direction];
+            text += "[" + (i + 1) + ":(" + x + "," + y + ")" + dir + "], ";
+            if (i % 3 == 2) text += "<br>";
+        }
+        history_element.innerHTML = text;
+    }
+    pop() {
+        this.hands.pop();
+    }
+}
+
+class Undo {
+    constructor(board, history) {
+        this.board = board;
+        this.history = history;
+        this.setClickFunc();
+    }
+    undo() {
+        this.history.pop();
+        this.board.initializeCells();
+        for (let hand of this.history.hands) {
+            let turn = new Turn();
+            turn.put(hand);
+            while (turn.isInProgress) {
+                turn.rotate();
+            }
+        }
+    }
+    setClickFunc() {
+        let undo_element = document.getElementById(UNDO_ID);
+        undo_element.addEventListener("click", this.undo.bind(this));
+    }
+}
+
 class Game {
     constructor() {
         this.board = new Board();
@@ -224,6 +335,9 @@ class Game {
         this.counter = new Counter();
         this.turn = new Turn();
         this.cellEventManager = new CellEventManager(this.board, this.selector, this.turn);
+        this.reset = new Reset(this.board);
+        this.history = new History(this.board, this.selector, this.turn);
+        this.undo = new Undo(this.board, this.history);
 
         this.selector.setClickFunc();
         this.cellEventManager.setEvent();
@@ -237,6 +351,7 @@ class Game {
         this.board.draw();
         this.counter.draw();
         this.paintLegalHand();
+        this.history.drawHistry();
     }
     rotate() {
         this.turn.rotate();
